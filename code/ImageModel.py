@@ -2,16 +2,12 @@ from tkinter import *
 from PIL import ImageTk,Image,ImageDraw
 
 class ImageModel:
-    def __init__(self,name: str,path: str,image: Image,size:int ,color:tuple):
+    def __init__(self,name: str,path: str,image: Image):
         self.name = name
         self.path = path
         self.image = image
-        self.brush_size = size
-        self.brush_color = color
-        self.selected_piece = None
-        self.copied_piece = None
         self.layers = []
-
+        self.selected_piece=None
 
 
     def rename(self,name: str):
@@ -23,17 +19,11 @@ class ImageModel:
     def set_image(self,image: Image):
         self.image=image
 
-    def change_size(self,size:int):
-         self.brush_size=size
 
-    def change_color(self,color:tuple):
-        self.brush_color=color
 
     def asign_selected(self,selected):
         self.selected_piece=selected
 
-    def asign_copied(self,copied):
-        self.copied_piece=copied
 
     def add_layer(self,layer:Image):
         self.layers.append(layer)
@@ -64,5 +54,4 @@ class ImageModel:
     def apply_selected_scale(self):
         pass
 
-    def save(self):
-        pass
+
