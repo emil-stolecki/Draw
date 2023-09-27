@@ -4,11 +4,15 @@ from tkinter import filedialog
 from ImageModel import ImageModel
 
 class Display:
-    def __init__(self,methods,save_method):
+    def __init__(self,methods,save_method,brush_methods):
         self.mode=0 #mode=0-draw, 1-create shape, 2-select, 3-transform
-        self.cursor_position = []  # x,y
+        self.shape=0 #shape 0-line,1-rectangle, 2-circle, 3-perspective
+        #self.cursor_position = []  # x,y
+        self.prev_position=[]
+        self.clicked=[]
         self.methods=methods
         self.save_method=save_method
+        self.brush=brush_methods
         self.root = Tk()
         self.root.title("Draw")
         self.root.geometry("1400x900")
@@ -33,21 +37,36 @@ class Display:
         self.file_button = Button( self.buttons_bar , text="File", command=self.file_button_click)
         self.file_button.pack(side="left")
         #file buttons' drop down menu
-        self.menu = Menu(self.root, tearoff=0)
-        self.menu.add_command(label="New", command=self.new_chosen)
-        self.menu.add_command(label="Open", command=self.open_chosen)
-        self.menu.add_command(label="Save", command=self.save_chosen)
-        self.menu.add_command(label="Save as...", command=self.save_as_chosen)
+        self.file_menu = Menu(self.root, tearoff=0)
+        self.file_menu.add_command(label="New", command=self.new_chosen)
+        self.file_menu.add_command(label="Open", command=self.open_chosen)
+        self.file_menu.add_command(label="Save", command=self.save_chosen)
+        self.file_menu.add_command(label="Save as...", command=self.save_as_chosen)
 
         self.draw_button = Button( self.buttons_bar , text="Draw",command=self.draw_button_click)
         self.draw_button.pack(side="left")
 
         self.shape_button = Button( self.buttons_bar , text="Shape",command=self.shape_button_click)
         self.shape_button.pack(side="left")
-        self.size_button = Button( self.buttons_bar , text="Size",command=self.size_button_click)
+        #shape_button's drop down menu
+        self.shape_menu = Menu(self.root, tearoff=0)
+        self.shape_menu.add_command(label="Line",command=self.create_line)
+        self.shape_menu.add_command(label="Rectangle", command=self.create_rectangle)
+        self.shape_menu.add_command(label="Circle", command=self.create_circle)
+        self.shape_menu.add_command(label="Perspective",command=self.create_perspective)
+
+        self.size_button = Button(self.buttons_bar , text="Size",command=self.size_button_click)
         self.size_button.pack(side="left")
+        #slider
+        self.slider_frame=LabelFrame(self.root)
+        self.size_slider=Scale(self.slider_frame,orient="horizontal",width=50, from_=1,to=100, command=self.get_slider_value)
+        self.size_slider.grid(row=0, column=0)
+        self.confirm_size=Button(self.slider_frame, text="X",command=self.hide_slider)
+        self.confirm_size.grid(row=0, column=1)
+        # colorpicker
         self.color_button = Button( self.buttons_bar , text="Color",command=self.color_button_click)
         self.color_button.pack(side="left")
+
         self.select_button = Button( self.buttons_bar , text="Select",command=self.select_button_click)
         self.select_button.pack(side="left")
         self.transform_button = Button( self.buttons_bar , text="Transform",command=self.transform_button_click)
@@ -69,6 +88,8 @@ class Display:
         # mouse events
         self.canvas.bind("<Button-1>", self.left_click_action)
         self.canvas.bind("<B1-Motion>", self.hold_mouse_action)
+        self.canvas.bind("<ButtonRelease-1>",self.release)
+
 
         #image for the canvas
         image = Image.new('RGBA', (1000, 1000), (250, 250, 250, 0))
@@ -87,7 +108,7 @@ class Display:
 
     def file_button_click(self):
 
-        self.menu.post(self.file_button.winfo_rootx(), self.file_button.winfo_rooty() + self.file_button.winfo_height())
+        self.file_menu.post(self.file_button.winfo_rootx(), self.file_button.winfo_rooty() + self.file_button.winfo_height())
 
     #creates new canvas
     def new_chosen(self):
@@ -138,44 +159,70 @@ class Display:
 
 
     def hold_mouse_action(self,event):
-        self.cursor_position=[event.x,event.y]
-        self.methods.get(self.mode)(event.x,event.y)
+        if self.mode !=1:
+            self.prev_position = self.clicked
+            self.clicked = [event.x, event.y]
+
+            self.methods.get(self.mode)([event.x,event.y,self.prev_position[0],self.prev_position[1]])
+        #print("drag {0} {1} {2} {3}".format(event.x,event.y,self.prev_position[0],self.prev_position[1]))
 
 
     def left_click_action(self,event):
-        self.cursor_position=[event.x, event.y]
+        #print("click")
+        self.prev_position= [event.x, event.y]
+        self.clicked = [event.x, event.y]
+        if self.mode != 1:
+            self.methods.get(self.mode)([event.x,event.y,self.prev_position[0],self.prev_position[1]])
 
 
+    def release(self,event):
+        #print("release")
+        if self.mode !=0:
+            x0=self.clicked[0]
+            x1=event.x
+            if event.x<x0:
+                x1=x0
+                x0=event.x
 
+            y0=self.clicked[1]
+            y1=event.y
+            if event.y < y0:
+                y1=y0
+                y0 = event.y
+
+
+            self.methods.get(self.mode)([self.shape,[x0,y0,x1,y1]])
 
     def draw_button_click(self):
         #enable drawing
         self.mode=0
 
-        #instead of booleans, one int
-
-        #ImageDraw.point(xy, fill=None)
-        #canvas.bind("<Button-1>", get_x_and_y)
-        #canvas.bind("<B1-Motion>", draw_smth)
-
-
-        #img = Image.new('RGBA', (500, 500), (250, 250, 250,0))
-        #draw = ImageDraw.Draw(img)
-        #rectangle_coords = [(50, 50), (450, 250)]
-        #rectangle_color = (255, 0, 0)
-
-        #draw.rectangle(rectangle_coords, fill=rectangle_color)
-        #for the display
-        #self.photo_image.paste(img)
-        #actual edit
-        #self.model.image.paste(img)
 
     def shape_button_click(self):
-        print("hello")
+        self.shape_menu.post(self.shape_button.winfo_rootx(),
+                            self.shape_button.winfo_rooty() + self.shape_button.winfo_height())
 
+    def create_line(self):
+        self.mode=1
+        self.shape=0
+    def create_rectangle(self):
+        self.mode = 1
+        self.shape =1
+    def create_circle(self):
+        self.mode = 1
+        self.shape=2
+        
+    def create_perspective(self):
+        pass
     def size_button_click(self):
-        print("hello")
+        self.slider_frame.place(x=self.size_button.winfo_x(),
+                               y=self.size_button.winfo_y()+self.size_button.winfo_height())
 
+    def get_slider_value(self,value):
+        self.brush.get(0)(int(value))
+
+    def hide_slider(self):
+        self.slider_frame.place_forget()
     def color_button_click(self):
         print("hello")
 
