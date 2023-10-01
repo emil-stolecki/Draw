@@ -3,21 +3,21 @@ from PIL import ImageTk,Image,ImageDraw
 
 class ImageModel:
     def __init__(self,name: str,path: str,image: Image):
-        self.name = name
+       # self.name = name
         self.path = path
         self.image = image
         self.layers = []
         self.selected_piece=None
 
 
-    def rename(self,name: str):
-        self.name=name
+   #def rename(self,name: str):
+        #self.name=name
 
     def set_path(self,path: str):
         self.path=path
 
-    def set_image(self,image: Image):
-        self.image=image
+    def get_path(self):
+        return self.path
 
 
 

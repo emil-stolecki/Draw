@@ -16,22 +16,32 @@ class Controller:
         }
         self.methods = {
             0: self.draw,
-            1: self.create_shape,
-            2: self.select,
-            3: self.transform
+            1: self.erase,
+            2: self.create_shape,
+            3: self.select,
+            4: self.transform
         }
 
-        image = Image.new('RGBA', (1000, 1000), (250, 250, 250, 100))
-        self.img = ImageModel("name", "path", image)
+        image = Image.new('RGBA', (1000, 800), (255, 255, 255, 255))
+        self.img = ImageModel(name="name", path=None, image=image)
+
+        self.image_methods={
+            0:self.save_image,
+            1:self.img.set_path,
+            2:self.img.get_path,
+            3:self.new_image
+        }
         self.brush=Brush(6,(0,0,0))
 
         self.brush_methods= {
             0:self.brush.change_size,
             1:self.brush.change_color,
-            2:self.brush.change_fill
+            2:self.brush.change_fill,
+            3:self.brush.get_size,
+            4:self.brush.remove_fill
         }
         self.clipBoard=Clipboard()
-        self.display=Display(self.methods,self.save_image,self.brush_methods)
+        self.display=Display(self.methods,self.image_methods,self.brush_methods)
 
         self.draw = ImageDraw.Draw(self.img.image)
 
@@ -39,15 +49,27 @@ class Controller:
         x1,x2=points[0]-self.brush.brush_size/2,points[0]+self.brush.brush_size/2
         y1,y2=points[1]-self.brush.brush_size/2,points[1]+self.brush.brush_size/2
         #edit image
-        self.draw.ellipse((x1,y1,x2,y2),fill=self.brush.brush_color)
+        self.draw.ellipse((x1,y1,x2,y2),fill=self.brush.brush_color,outline=self.brush.brush_color)
         self.draw.line((points[0], points[1], points[2], points[3]),width=self.brush.brush_size,fill=self.brush.brush_color)
         #update display
-        self.display.canvas.create_oval(x1,y1,x2,y2, fill=self.brush.brush_color)
+        self.display.canvas.create_oval(x1,y1,x2,y2, fill=self.brush.brush_color,outline=self.brush.brush_color)
         self.display.canvas.create_line(points[0], points[1], points[2], points[3], width=self.brush.brush_size,fill=self.brush.brush_color)
 
 
+    #CANT EREASE
+    def erase(self,points):
+        x1, x2 = points[0] - self.brush.brush_size / 2, points[0] + self.brush.brush_size / 2
+        y1, y2 = points[1] - self.brush.brush_size / 2, points[1] + self.brush.brush_size / 2
+        # edit image
+        self.draw.ellipse((x1, y1, x2, y2), fill=self.brush.fill_color, outline=self.brush.fill_color)
+        self.draw.line((points[0], points[1], points[2], points[3]), width=self.brush.brush_size,
+                       fill=self.brush.fill_color)
+        # update display
+        self.display.canvas.create_oval(x1, y1, x2, y2, fill=self.brush.fill_color, outline=self.brush.fill_color)
+        self.display.canvas.create_line(points[0], points[1], points[2], points[3], width=self.brush.brush_size,
+                                        fill=self.brush.fill_color)
     def create_shape(self, args):
-        self.shapes.get(args[0])(args[1])
+        self.shapes.get(args[0])(args[1])#select method, pass arguments
 
 
     def create_line(self,points):
@@ -101,5 +123,9 @@ class Controller:
 
     def save_image(self,path):
         self.img.image.save(path)
+
+    def new_image(self,image):
+        self.img = ImageModel(name="name", path=None, image=image)
+        self.draw=ImageDraw.Draw(self.img.image)
 
 
