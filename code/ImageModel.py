@@ -20,6 +20,9 @@ class ImageModel:
         return self.path
 
 
+    def get_image(self):
+        return self.image
+
 
     def asign_selected(self,selected):
         self.selected_piece=selected
@@ -39,19 +42,6 @@ class ImageModel:
     def copy_layer(self,layer:Image):
         pass
 
-    def draw(self,layer:Image):
-        pass
 
-    def draw_shape(self,layer:Image):
-        pass
-
-    def apply_selected_location(self):
-        pass
-
-    def apply_selected_rotation(self):
-        pass
-
-    def apply_selected_scale(self):
-        pass
 
 
