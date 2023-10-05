@@ -1,20 +1,56 @@
 from tkinter import *
-from PIL import ImageTk,Image,ImageDraw,ImageGrab
+from PIL import ImageTk,Image,ImageDraw
 from tkinter import filedialog,colorchooser
 from ImageModel import ImageModel
 
 class Display:
-    def __init__(self,methods,image_method,brush_methods):
-        self.mode=0 #mode=0-draw,1-create shape 2-select, 3-transform
-        self.shape=0 #shape 0-line,1-rectangle, 2-circle, 3-perspective
-        #self.cursor_position = []  # x,y
+    def __init__(self,methods,image_method,brush_methods,clipboard):
+        self.mode=0
+        # 0-draw
+        # 1-create shape
+        # 2-copy
+        # 3-cut
+        # 4-paste
+        # 5-apply
+
+        self.shape=0
+        # 0-line
+        # 1-rectangle
+        # 2-circle
+        # 3-perspective
+        self.transform_mode=0
+        # 0-move
+        # 1-rotate
+        # 2-scale
+        self.methods = methods
+        #0-draw
+        #1-create_shape
+        #2-select
+        #3-transform
+        self.image_method = image_method
+        #0-save_image
+        #1-img.set_path
+        #2-img.get_path
+        #3-new_image
+        #4-img.get_image
+        self.brush = brush_methods
+        #0-brush.change_size
+        #1-brush.change_color
+        #2-brush.change_fill
+        #3-brush.get_size
+        #4-brush.remove_fill
+        self.clipboard=clipboard
+        #0-asign_copied
+        #1-get_copied
+
         self.prev_position=[]
         self.clicked=[]
         self.preview_item = None
-        self.preview_item_start_position = None
-        self.methods=methods
-        self.image_method=image_method
-        self.brush=brush_methods
+        self.selected_area=None
+        self.temp_item_start_position = (0,0)
+        self.pasted_piece=None
+        self.pasted_photo=None
+
         self.root = Tk()
         self.root.title("Draw")
         self.root.geometry("1400x900")
@@ -52,22 +88,22 @@ class Display:
         self.file_menu = Menu(self.root, tearoff=0)
         self.file_menu.add_command(label="New", command=self.new_chosen)
         self.file_menu.add_command(label="Open", command=self.open_chosen)
-        self.file_menu.add_command(label="Save", command=self.save_chosen)
-        self.file_menu.add_command(label="Save as...", command=self.save_as_chosen)
+        self.file_menu.add_command(label="Save", command=self._save_chosen)
+        self.file_menu.add_command(label="Save as...", command=self._save_as_chosen)
 
-        self.draw_button = Button( self.buttons_bar , text="Draw",command=self.draw_button_click,height=2,width=5,bg=self.theme.get("button_active"))
+        self.draw_button = Button( self.buttons_bar , text="Draw",command=self._draw_button_click,height=2,width=5,bg=self.theme.get("button_active"))
         self.draw_button.pack(side="left")
 
         # shape_button
-        self.shape_button = Button(self.buttons_bar, text="Shape", command=self.shape_button_click, height=2, width=5,
+        self.shape_button = Button(self.buttons_bar, text="Shape", command=self._shape_button_click, height=2, width=5,
                                    bg=self.theme.get("button"))
         self.shape_button.pack(side="left")
         #shape_button's drop down menu
         self.shape_menu = Menu(self.root, tearoff=0)
-        self.shape_menu.add_command(label="Line",command=self.create_line)
-        self.shape_menu.add_command(label="Rectangle", command=self.create_rectangle)
-        self.shape_menu.add_command(label="Circle", command=self.create_circle)
-        self.shape_menu.add_command(label="Perspective",command=self.create_perspective)
+        self.shape_menu.add_command(label="Line",command=self._create_line)
+        self.shape_menu.add_command(label="Rectangle", command=self._create_rectangle)
+        self.shape_menu.add_command(label="Circle", command=self._create_circle)
+        self.shape_menu.add_command(label="Perspective",command=self._create_perspective)
 
         #brush size button
         self.size_button_frame_border=Frame(self.buttons_bar,padx=2,pady=2,bg=self.theme.get("button_border"))
@@ -79,16 +115,16 @@ class Display:
         self.size_ind = Label(self.size_button_frame, text="6",bg=self.theme.get("button"))
         self.size_ind.pack()
 
-        self.size_button_frame.bind("<Button-1>", self.size_button_click)
-        size_label.bind("<Button-1>", self.size_button_click)
-        self.size_ind.bind("<Button-1>", self.size_button_click)
+        self.size_button_frame.bind("<Button-1>", self._size_button_click)
+        size_label.bind("<Button-1>", self._size_button_click)
+        self.size_ind.bind("<Button-1>", self._size_button_click)
 
         self.size_button_frame_border.pack(side="left")
         #slider
         self.slider_frame=LabelFrame(self.root)
-        self.size_slider=Scale(self.slider_frame,orient="horizontal",width=15, from_=1,to=100, command=self.get_slider_value)
+        self.size_slider=Scale(self.slider_frame,orient="horizontal",width=15, from_=1,to=100, command=self._get_slider_value)
         self.size_slider.grid(row=0, column=0)
-        self.confirm_size=Button(self.slider_frame, text="X",command=self.hide_slider)
+        self.confirm_size=Button(self.slider_frame, text="X",command=self._hide_slider)
         self.confirm_size.grid(row=0, column=1)
 
         # brush color
@@ -104,9 +140,9 @@ class Display:
         self.fg_color = Label(self.fg_color_frame, image=self.fg_photo,bg=self.theme.get("button"))
         self.fg_color.pack()
 
-        self.fg_color_frame.bind("<Button-1>", self.color_button_click)
-        fg_name_label.bind("<Button-1>", self.color_button_click)
-        self.fg_color.bind("<Button-1>", self.color_button_click)
+        self.fg_color_frame.bind("<Button-1>", self._color_button_click)
+        fg_name_label.bind("<Button-1>", self._color_button_click)
+        self.fg_color.bind("<Button-1>", self._color_button_click)
 
         self.fg_color_frame_border.pack(side="left")
 
@@ -123,20 +159,34 @@ class Display:
         self.bg_color = Label(self.bg_color_frame, image=self.bg_photo,bg=self.theme.get("button"))
         self.bg_color.pack()
 
-        self.bg_color_frame.bind("<Button-1>",self.fill_button_click)
-        bg_name_label.bind("<Button-1>", self.fill_button_click)
-        self.bg_color.bind("<Button-1>", self.fill_button_click)
+        self.bg_color_frame.bind("<Button-1>",self._fill_button_click)
+        bg_name_label.bind("<Button-1>", self._fill_button_click)
+        self.bg_color.bind("<Button-1>", self._fill_button_click)
 
         self.bg_color_frame_border.pack(side="left")
 
         #remove fill
-        self.remove_fill_button = Button(self.buttons_bar , text="No Fill",command=self.remove_fill_click,height=2,width=5,bg=self.theme.get("button"))
+        self.remove_fill_button = Button(self.buttons_bar , text="No Fill",command=self._remove_fill_click,height=2,width=5,bg=self.theme.get("button"))
         self.remove_fill_button.pack(side="left")
 
-        self.select_button = Button(self.buttons_bar , text="Select",command=self.select_button_click,height=2,width=5,bg=self.theme.get("button"))
+        #selection
+        self.select_button = Button(self.buttons_bar , text="Select",command=self._select_button_click,height=2,width=5,bg=self.theme.get("button"))
         self.select_button.pack(side="left")
-        self.transform_button = Button( self.buttons_bar , text="Transform",command=self.transform_button_click,height=2,width=5,bg=self.theme.get("button"))
+
+        self.selection_menu = Menu(self.root, tearoff=0)
+        self.selection_menu.add_command(label="Rectangle", command=self._select_with_rectangle)
+        self.selection_menu.add_command(label="Circle", command=self._select_with_elipse)
+        self.selection_menu.add_command(label="Free-form", command=self._select_with_free_form)
+        self.selection_menu.add_command(label="No Selection", command=self._no_selection)
+
+        #transform
+        self.transform_button = Button( self.buttons_bar , text="Transform",command=self._transform_button_click,height=2,width=5,bg=self.theme.get("button"))
         self.transform_button.pack(side="left")
+
+        self.transform_menu = Menu(self.root, tearoff=0)
+        self.transform_menu.add_command(label="Move", command=self._move)
+        self.transform_menu.add_command(label="Rotate", command=self._rotate)
+        self.transform_menu.add_command(label="Scale", command=self._scale)
 
         #scroll panes for the workspace
         self.h = Scrollbar(self.workspace, orient='horizontal')
@@ -152,9 +202,10 @@ class Display:
         self.canvas.config(scrollregion=self.canvas.bbox(ALL))
 
         # mouse events
-        self.canvas.bind("<Button-1>", self.left_click_action)
-        self.canvas.bind("<B1-Motion>", self.hold_mouse_action)
-        self.canvas.bind("<ButtonRelease-1>",self.release)
+        self.canvas.bind("<Button-1>", self._left_click_action)
+        self.canvas.bind("<B1-Motion>", self._hold_mouse_action)
+        self.canvas.bind("<ButtonRelease-1>",self._release)
+        self.canvas.bind("<Button-3>",self._right_click)
 
 
         #image for the canvas
@@ -168,7 +219,16 @@ class Display:
         self.myLabel3 = Label(self.layers, text="Layers", padx=100)
         self.myLabel3.pack()
 
+        #copy_mode menu
+        self.copy_mode_menu = Menu(self.root, tearoff=0)
+        self.copy_mode_menu.add_command(label="copy", command=self._copy)
+        self.copy_mode_menu.add_command(label="cut", command=self._cut)
+        self.copy_mode_menu.add_command(label="paste", command=self._paste)
 
+        #transform_mode menu
+        self.transform_mode_menu=Menu(self.root, tearoff=0)
+        self.transform_mode_menu.add_command(label="apply",command=self._apply_transform)
+        self.transform_mode_menu.add_command(label="cancel", command=self._cancel_transform)
 
     def loop(self):
 
@@ -192,9 +252,10 @@ class Display:
         self.v.config(command=self.canvas.yview)
         self.canvas.config(scrollregion=self.canvas.bbox(ALL))
         self.canvas.pack(fill="both", expand=True)
-        self.canvas.bind("<Button-1>", self.left_click_action)
-        self.canvas.bind("<B1-Motion>", self.hold_mouse_action)
-        self.canvas.bind("<ButtonRelease-1>", self.release)
+        self.canvas.bind("<Button-1>", self._left_click_action)
+        self.canvas.bind("<B1-Motion>", self._hold_mouse_action)
+        self.canvas.bind("<ButtonRelease-1>", self._release)
+        self.canvas.bind("<Button-3>", self._right_click)
 
 
    #OPEN/SAVE
@@ -218,16 +279,17 @@ class Display:
             self.v.config(command=self.canvas.yview)
             self.canvas.config(scrollregion=self.canvas.bbox(ALL))
             self.canvas.pack(fill="both", expand=True)
-            self.canvas.bind("<Button-1>", self.left_click_action)
-            self.canvas.bind("<B1-Motion>", self.hold_mouse_action)
-            self.canvas.bind("<ButtonRelease-1>", self.release)
+            self.canvas.bind("<Button-1>", self._left_click_action)
+            self.canvas.bind("<B1-Motion>", self._hold_mouse_action)
+            self.canvas.bind("<ButtonRelease-1>", self._release)
+            self.canvas.bind("<Button-3>", self._right_click)
 
-    def save_chosen(self):
+    def _save_chosen(self):
         if self.image_method.get(2)():#check if path exists
             self.image_method.get(0)(self.image_method.get(2)())#save
         else:
-            self.save_as_chosen()
-    def save_as_chosen(self):
+            self._save_as_chosen()
+    def _save_as_chosen(self):
         file_path = filedialog.asksaveasfilename(
             defaultextension=".png",
             filetypes=(("PNG files", "*.png"), ("JPEG files", "*.jpg"), ("All files", "*.*")),
@@ -241,23 +303,53 @@ class Display:
 
     #MOUSE EVENTS
 
-    def left_click_action(self,event):
+    def _left_click_action(self,event):
         x_offset=self.h.get()[0]*self.image_w
         y_offset=self.v.get()[0]*self.image_h
-        self.prev_position= [event.x+x_offset, event.y+y_offset]
-        self.clicked = [event.x+x_offset, event.y+y_offset]
-        if self.mode ==0 and self.image_w>event.x+x_offset and self.image_h>event.y+y_offset:#for drawing
+        self.clicked = [event.x + x_offset, event.y + y_offset]
+        # for drawing
+        if self.mode ==0 and self.image_w>event.x+x_offset and self.image_h>event.y+y_offset:
+            self.prev_position = [event.x + x_offset, event.y + y_offset]
             self.methods.get(self.mode)([event.x+x_offset,event.y+y_offset,self.prev_position[0],self.prev_position[1]])#draw dot
+        #for creating shapes
         if self.mode ==1:#create an item on canvas that will be used as preview
-            self.preview_item_start_position=(event.x+x_offset,event.y+y_offset)
+            self.temp_item_start_position=(event.x+x_offset,event.y+y_offset)
             if self.shape==0:
                 self.preview_item=self.canvas.create_line(event.x+x_offset,event.y+y_offset,event.x+x_offset,event.y+y_offset,width=1)
             if self.shape==1:
                 self.preview_item=self.canvas.create_rectangle(event.x+x_offset,event.y+y_offset,event.x+x_offset,event.y+y_offset,width=1)
             if self.shape==2:
                 self.preview_item=self.canvas.create_oval(event.x+x_offset,event.y+y_offset,event.x+x_offset,event.y+y_offset,width=1)
+        #for selecting
+        if self.mode ==2:#create an item on canvas that will be used as preview
+            if self.selected_area:  # delete old if exists
+                self.canvas.delete(self.selected_area)
+            self.temp_item_start_position = (event.x + x_offset, event.y + y_offset)
+            if self.shape==1:#select with rectangle
+                self.selected_area=self.canvas.create_rectangle(event.x+x_offset,event.y+y_offset,event.x+x_offset,event.y+y_offset,width=1,dash=(2,2))
+            if self.shape==2:#select with elipse
+                pass
+                self.selected_area=self.canvas.create_oval(event.x+x_offset,event.y+y_offset,event.x+x_offset,event.y+y_offset,width=1,dash=(2,2))
+        #for transforming
+        if self.mode == 3:
+            self.prev_position = [event.x + x_offset, event.y + y_offset]
+            if self.pasted_piece==None: #if there is no image to transform, make one from selection
 
-    def hold_mouse_action(self,event):
+                if self.selected_area: #transform selection
+                    self._cut()
+                    self._paste()
+
+                else: # if there is no active selection select whole image/layer
+                    self._flatten_image()
+                    og_img = self.image_method.get(4)()
+                    self.clipboard.get(0)(og_img)
+                    new_image = Image.new("RGBA", size=og_img.size,color=(0,0,0,0))
+                    self.clipboard.get(2)(new_image)
+                    self.selected_area = self.canvas.bbox(self.background_image)
+                    self.temp_item_start_position = (0, 0)
+                    self.pasted_piece=self.background_image
+
+    def _hold_mouse_action(self,event):
         # offset of the slider
         x_offset = self.h.get()[0] * self.image_w
         y_offset = self.v.get()[0] * self.image_h
@@ -271,7 +363,7 @@ class Display:
 
         if self.mode ==1:#creating shapes (preview)
             self.canvas.delete(self.preview_item)#delete old create new
-            x0,y0=self.preview_item_start_position
+            x0,y0=self.temp_item_start_position
             x1,y1=event.x + x_offset, event.y + y_offset
             if self.shape!=0:
                 if x1<x0:
@@ -287,10 +379,39 @@ class Display:
             if self.shape == 2:
                 self.preview_item = self.canvas.create_oval(x0,y0,x1,y1, width=1)
 
+        if self.mode ==2:#selection (preview)
+            self.canvas.delete(self.selected_area)#delete old create new
+            x0,y0=self.temp_item_start_position
+            x1,y1=event.x + x_offset, event.y + y_offset
+            if self.shape!=0:
+                if x1<x0:
+                    x1=x0
+                    x0=event.x+x_offset
+                if y1 < y0:
+                    y1=y0
+                    y0 = event.y+y_offset
+            if self.shape == 0:
+                self.selected_area = self.canvas.create_line(x0,y0,x1,y1, width=1,dash=(2,2))
+            if self.shape == 1:
+                self.selected_area = self.canvas.create_rectangle(x0,y0,x1,y1, width=1,dash=(2,2))
+            if self.shape == 2:
+                self.selected_area = self.canvas.create_oval(x0,y0,x1,y1, width=1,dash=(2,2))
+        # for transforming
+        if self.mode == 3:
+            if self.transform_mode==0:#move
+                x0, y0 = self.temp_item_start_position
+                x=event.x-self.prev_position[0]+x0
+                y=event.y-self.prev_position[1]+y0
+                self.canvas.moveto(self.pasted_piece,x,y)
+            if self.transform_mode==1:#rotare
+                pass
+            if self.transform_mode==2:#scale
+                pass
 
 
-    def release(self,event):
-        if self.mode ==1  and self.image_w>self.clicked[0] and self.image_h>self.clicked[1]:#for creating shapes
+    def _release(self,event):
+        # for creating shapes
+        if self.mode ==1 and self.image_w>self.clicked[0] and self.image_h>self.clicked[1]:
             x_offset = self.h.get()[0] * self.image_w
             y_offset = self.v.get()[0] * self.image_h
             x0=self.clicked[0]
@@ -304,72 +425,99 @@ class Display:
                 if y1 < y0:
                     y1=y0
                     y0 = event.y+y_offset
-
+            self.canvas.delete(self.preview_item)
             self.methods.get(self.mode)([self.shape,[x0,y0,x1,y1]])#draw shape
+            self.temp_item_start_position=(0,0)#reset
+        # for selection
+        if self.mode == 2:
+            self.canvas.itemconfigure(self.selected_area, outline="red")
+            self.temp_item_start_position=(0,0)#reset
+        #for transform
+        if self.mode ==3:
+            self.temp_item_start_position=self.canvas.coords(self.pasted_piece)
 
+
+    def _right_click(self,event):
+        x_offset=self.root.winfo_x()+self.frame.winfo_x()+self.canvas.winfo_x()+12
+        y_offset=self.root.winfo_y()+self.frame.winfo_y()+self.canvas.winfo_y()+35
+        if self.mode==2:
+            self.copy_mode_menu.post(event.x+x_offset,event.y+y_offset)
+        if self.mode==3:
+            self.transform_mode_menu.post(event.x+x_offset,event.y+y_offset)
    #DRAWING/CREATING SHAPES BUTTONS
-    def draw_button_click(self):
+    def _draw_button_click(self):
         self.mode=0
         self.draw_button.config(bg=self.theme.get("button_active"))
         self.shape_button.config(bg=self.theme.get("button"))
+        self.select_button.config(bg=self.theme.get("button"))
+        self.transform_button.config(bg=self.theme.get("button"))
+        self._cancel_transform()
 
 
-    def shape_button_click(self):
+    def _shape_button_click(self):
         self.shape_menu.post(self.shape_button.winfo_rootx(),
                             self.shape_button.winfo_rooty() + self.shape_button.winfo_height())
 
-    def create_line(self):
+    def _create_line(self):
         self.mode=1
         self.draw_button.config(bg=self.theme.get("button"))
         self.shape_button.config(bg=self.theme.get("button_active"))
+        self.select_button.config(bg=self.theme.get("button"))
+        self.transform_button.config(bg=self.theme.get("button"))
         self.shape=0
 
-    def create_rectangle(self):
+    def _create_rectangle(self):
         self.mode = 1
         self.draw_button.config(bg=self.theme.get("button"))
         self.shape_button.config(bg=self.theme.get("button_active"))
+        self.select_button.config(bg=self.theme.get("button"))
+        self.transform_button.config(bg=self.theme.get("button"))
         self.shape =1
-    def create_circle(self):
+    def _create_circle(self):
         self.mode = 1
         self.draw_button.config(bg=self.theme.get("button"))
         self.shape_button.config(bg=self.theme.get("button_active"))
+        self.select_button.config(bg=self.theme.get("button"))
+        self.transform_button.config(bg=self.theme.get("button"))
         self.shape=2
         
-    def create_perspective(self):
+    def _create_perspective(self):
         self.draw_button.config(bg=self.theme.get("button"))
         self.shape_button.config(bg=self.theme.get("button_active"))
+        self.select_button.config(bg=self.theme.get("button"))
+        self.transform_button.config(bg=self.theme.get("button"))
 
 
     #MODIFY THE BRUSH
-    def size_button_click(self,event):
+    def _size_button_click(self,event):
         self.slider_frame.place(x=self.size_button_frame_border.winfo_x(),
                                y=self.size_button_frame_border.winfo_y()+self.size_button_frame_border.winfo_height())
         self.size_slider.set(self.brush.get(3)())
 
 
 
-    def get_slider_value(self,value):
+    def _get_slider_value(self,value):
         self.brush.get(0)(int(value))
         self.size_ind.config(text=value)
 
 
-    def hide_slider(self):
+    def _hide_slider(self):
         self.slider_frame.place_forget()
-    def color_button_click(self,event):
+    def _color_button_click(self,event):
         color=colorchooser.askcolor()[1]
         self.brush.get(1)(color)
         self.fg_color_image = Image.new('RGB', (35, 17), color=color)
         self.fg_photo = ImageTk.PhotoImage(self.fg_color_image)
         self.fg_color.config(image=self.fg_photo)
 
-    def fill_button_click(self,event):
+    def _fill_button_click(self,event):
         color=colorchooser.askcolor()[1]
         self.brush.get(2)(color)
         self.bg_color_image = Image.new('RGB', (35, 17), color=color)
         self.bg_photo = ImageTk.PhotoImage(self.bg_color_image)
         self.bg_color.config(image=self.bg_photo)
 
-    def remove_fill_click(self):
+    def _remove_fill_click(self):
         self.brush.get(4)()
         self.bg_color_image = Image.new('RGBA', (35, 17), (0,0,0,0))
         self.bg_photo = ImageTk.PhotoImage(self.bg_color_image)
@@ -377,23 +525,110 @@ class Display:
 
 
     #
-    def flatten_image(self):
+    def _flatten_image(self):
         img=self.image_method.get(4)()
         self.photo_image = ImageTk.PhotoImage(img)
         self.canvas.delete("all")
         self.background_image=self.canvas.create_image(0, 0, anchor=NW, image=self.photo_image)
+        self.selected_area=None
+        self.pasted_piece=None
 
 
 
 
-    def select_button_click(self):
-        self.flatten_image()
+    def _select_button_click(self):
+        self.selection_menu.post(self.select_button.winfo_rootx(),
+                             self.select_button.winfo_rooty() + self.select_button.winfo_height())
 
-    def transform_button_click(self):
-        #self.methods.get(1)([4,0])
-        u=self.canvas.find_all()
-        print(u)
+        self._flatten_image()
+
+    def _select_with_rectangle(self):
+        self.mode=2
+        self.shape=1
+        self.draw_button.config(bg=self.theme.get("button"))
+        self.shape_button.config(bg=self.theme.get("button"))
+        self.select_button.config(bg=self.theme.get("button_active"))
+        self.transform_button.config(bg=self.theme.get("button"))
+        self._cancel_transform()
+    def _select_with_elipse(self):
+        self.mode = 2
+        self.shape = 2
+        self.draw_button.config(bg=self.theme.get("button"))
+        self.shape_button.config(bg=self.theme.get("button"))
+        self.select_button.config(bg=self.theme.get("button_active"))
+        self.transform_button.config(bg=self.theme.get("button"))
+        self._cancel_transform()
+    def _select_with_free_form(self):
+        self.mode = 2
+        self.shape = 3
+        self.draw_button.config(bg=self.theme.get("button"))
+        self.shape_button.config(bg=self.theme.get("button"))
+        self.select_button.config(bg=self.theme.get("button_active"))
+        self.transform_button.config(bg=self.theme.get("button"))
+        self._cancel_transform()
 
 
+    def _no_selection(self):
+        self.canvas.delete(self.selected_area)
+        self.selected_area=None
+
+    def _copy(self):
+        if self.selected_area:
+            bbox = self.canvas.coords(self.selected_area)
+            self.methods.get(2)(bbox,self.shape)
+
+            
+    def _cut(self):
+        bbox = self.canvas.coords(self.selected_area)
+        new_image=self.methods.get(3)(bbox,self.shape)
+        #update canvas
+        self.photo_image = ImageTk.PhotoImage(new_image)
+        self.canvas.delete("all")
+        self.background_image = self.canvas.create_image(0, 0, anchor=NW, image=self.photo_image)
+    def _paste(self):
+        piece=self.clipboard.get(1)()
+        if piece:
+            self.pasted_photo=ImageTk.PhotoImage(piece)
+            self.pasted_piece =self.canvas.create_image(0, 0, anchor=NW, image=self.pasted_photo)
+
+    def _transform_button_click(self):
+        self.transform_menu.post(self.transform_button.winfo_rootx(),
+                                 self.transform_button.winfo_rooty() + self.transform_button.winfo_height())
+
+    def _move(self):
+        self.mode = 3
+        self.transform_mode=0
+        self.draw_button.config(bg=self.theme.get("button"))
+        self.shape_button.config(bg=self.theme.get("button"))
+        self.select_button.config(bg=self.theme.get("button"))
+        self.transform_button.config(bg=self.theme.get("button_active"))
+
+    def _rotate(self):
+        self.mode = 3
+        self.transform_mode=1
+        self.draw_button.config(bg=self.theme.get("button"))
+        self.shape_button.config(bg=self.theme.get("button"))
+        self.select_button.config(bg=self.theme.get("button"))
+        self.transform_button.config(bg=self.theme.get("button_active"))
+
+
+    def _scale(self):
+        self.mode = 3
+        self.transform_mode=2
+        self.draw_button.config(bg=self.theme.get("button"))
+        self.shape_button.config(bg=self.theme.get("button"))
+        self.select_button.config(bg=self.theme.get("button"))
+        self.transform_button.config(bg=self.theme.get("button_active"))
+
+
+
+    def _apply_transform(self):
+        x,y=self.temp_item_start_position
+        self.methods.get(5)(x,y)
+        self._flatten_image()
+
+    def _cancel_transform(self):
+        self.clipboard.get(2)(None)
+        self._flatten_image()
 
 

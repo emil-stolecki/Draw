@@ -3,15 +3,11 @@ from PIL import ImageTk,Image,ImageDraw
 
 class ImageModel:
     def __init__(self,name: str,path: str,image: Image):
-       # self.name = name
         self.path = path
         self.image = image
         self.layers = []
         self.selected_piece=None
 
-
-   #def rename(self,name: str):
-        #self.name=name
 
     def set_path(self,path: str):
         self.path=path
@@ -24,7 +20,7 @@ class ImageModel:
         return self.image
 
 
-    def asign_selected(self,selected):
+    def assign_selected(self, selected):
         self.selected_piece=selected
 
 
@@ -41,7 +37,4 @@ class ImageModel:
 
     def copy_layer(self,layer:Image):
         pass
-
-
-
 

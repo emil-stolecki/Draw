@@ -3,7 +3,7 @@ from Display import Display
 from Brush import Brush
 from Clipboard import Clipboard
 from tkinter import *
-from PIL import ImageTk,Image,ImageDraw
+from PIL import ImageTk,Image,ImageDraw,ImageOps
 class Controller:
     ##
 
@@ -18,8 +18,11 @@ class Controller:
         self.methods = {
             0: self.draw,
             1: self.create_shape,
-            2: self.select,
-            3: self.transform
+            2: self.copy,
+            3: self.cut,
+            4: self.paste,
+            5: self.apply,
+
         }
 
         image = Image.new('RGBA', (1000, 800), (255, 255, 255, 255))
@@ -41,8 +44,13 @@ class Controller:
             3:self.brush.get_size,
             4:self.brush.remove_fill
         }
-        self.clipBoard=Clipboard()
-        self.display=Display(self.methods,self.image_methods,self.brush_methods)
+        self.clipboard=Clipboard()
+        self.clipboard_methods={
+            0:self.clipboard.assign_copied,
+            1:self.clipboard.get_copied,
+            2:self.clipboard.assign_transforming,
+        }
+        self.display=Display(self.methods,self.image_methods,self.brush_methods,self.clipboard_methods)
 
         self.draw = ImageDraw.Draw(self.img.image)
 
@@ -108,7 +116,7 @@ class Controller:
         if points[0]==points[2] and points[1]==points[3]:
             is_same_point=True
 
-        if is_same_point==False:#draw the cicle in a rectangle x1,y1,x2,y2
+        if is_same_point==False:#draw the circle in a bbox x1,y1,x2,y2
             if self.brush.fill_color:
                 # edit image
                 self.draw.ellipse((points[0], points[1], points[2], points[3]),
@@ -141,11 +149,6 @@ class Controller:
         pass
 
 
-    def select(self):
-        pass
-    def transform(self):
-        pass
-
     def save_image(self,path):
         self.img.image.save(path)
 
@@ -154,6 +157,54 @@ class Controller:
         self.draw=ImageDraw.Draw(self.img.image)
 
 
+
+    def copy(self,bbox,shape):
+        # create mask
+        og_img = self.img.get_image()
+        mask = Image.new("L", size=og_img.size, color=0)
+        mask_draw = ImageDraw.Draw(mask)
+        if shape == 1:
+            mask_draw.rectangle(xy=bbox, fill=255)
+        if shape == 2:
+            mask_draw.ellipse(xy=bbox, fill=255)
+        # get a piece of the image
+        copied = Image.new("RGBA", size=og_img.size)
+        copied.paste(og_img, (0, 0), mask)
+        # put the image into the clipboard
+        self.clipboard.assign_copied(copied)
+    def cut(self,bbox,shape):
+        og_img =self.img.get_image()
+        # create mask
+        mask = Image.new("L", size=og_img.size, color=0)
+        mask_draw = ImageDraw.Draw(mask)
+        if shape == 1:
+            mask_draw.rectangle(xy=bbox, fill=255)
+        if shape == 2:
+            mask_draw.ellipse(xy=bbox, fill=255)
+        # get a piece of the imagw
+        copied = Image.new("RGBA", size=og_img.size)
+        copied.paste(og_img, (0, 0), mask)
+        # put the image into the clipboard
+        self.clipboard.assign_copied(copied)
+        # remove that part from the image(layer)
+        mask = ImageOps.invert(mask)
+        new_image = Image.new("RGBA", size=og_img.size)
+        new_image.paste(og_img, (0, 0), mask)
+        # cache image
+        self.clipboard.transforming_image=new_image
+        return new_image
+    def paste(self):
+        pass
+
+    def apply(self,x,y):
+        pasted = self.clipboard.get_copied()
+        if self.clipboard.transforming_image:
+            self.clipboard.transforming_image.paste(pasted, (int(x), int(y)), pasted)
+            self.new_image(self.clipboard.transforming_image)
+            self.clipboard.transforming_image = None
+
+        else:
+            self.img.image.paste(pasted, (int(x), int(y)), pasted)
 
     def _test(self,xd):
         w=51
