@@ -48,23 +48,30 @@ class Controller:
         self.clipboard_methods={
             0:self.clipboard.assign_copied,
             1:self.clipboard.get_copied,
-            2:self.clipboard.assign_transforming,
+            2:self.clipboard.assign_backup,
+            3:self.clipboard.get_copied_coords
+
         }
         self.display=Display(self.methods,self.image_methods,self.brush_methods,self.clipboard_methods)
 
         self.draw = ImageDraw.Draw(self.img.image)
 
     def draw(self,points):
-
-        x1,x2=points[0]-self.brush.brush_size/2,points[0]+self.brush.brush_size/2
-        y1,y2=points[1]-self.brush.brush_size/2,points[1]+self.brush.brush_size/2
+        size= self.brush.brush_size
+        x1,x2=points[0]-size/2,points[0]+size/2
+        y1,y2=points[1]-size/2,points[1]+size/2
         #edit image
-        self.draw.ellipse((x1,y1,x2,y2),fill=self.brush.brush_color)
-        self.draw.line((points[0], points[1], points[2], points[3]),width=self.brush.brush_size,fill=self.brush.brush_color)
+        if size>1:
+            # edit image
+            self.draw.ellipse((x1,y1,x2,y2),fill=self.brush.brush_color)
+            # update display
+            self.display.canvas.create_oval(x1,y1,x2,y2, fill=self.brush.brush_color,outline="")
+
+        #edit image
+        self.draw.line((points[0], points[1], points[2], points[3]),width=size,fill=self.brush.brush_color)
         #update display
-        self.display.canvas.create_oval(x1-0.5,y1-0.5,x2-0.5,y2-0.5,
-                                        fill=self.brush.brush_color,outline="")
-        self.display.canvas.create_line(points[0], points[1], points[2], points[3], width=self.brush.brush_size,fill=self.brush.brush_color)
+        self.display.canvas.create_line(points[0], points[1], points[2], points[3], width=size,fill=self.brush.brush_color)
+
 
 
 
@@ -119,7 +126,7 @@ class Controller:
         if is_same_point==False:#draw the circle in a bbox x1,y1,x2,y2
             if self.brush.fill_color:
                 # edit image
-                self.draw.ellipse((points[0], points[1], points[2], points[3]),
+                self.draw.ellipse((points[0]+1, points[1]+1, points[2], points[3]),
                               outline=self.brush.brush_color,fill=self.brush.fill_color, width=self.brush.brush_size)
 
                 # update display
@@ -128,7 +135,7 @@ class Controller:
                                             outline=self.brush.brush_color, fill=self.brush.fill_color,width=self.brush.brush_size)
             else:
                 #edit image
-                self.draw.ellipse((points[0], points[1], points[2], points[3]),
+                self.draw.ellipse((points[0]+1, points[1]+1, points[2], points[3]),
                           outline=self.brush.brush_color,width=self.brush.brush_size)
                 #update display
                 self.display.canvas.create_oval(points[0]+correction, points[1]+correction,
@@ -171,8 +178,8 @@ class Controller:
         copied = Image.new("RGBA", size=og_img.size)
         copied.paste(og_img, (0, 0), mask)
         # put the image into the clipboard
-        self.clipboard.assign_copied(copied)
-    def cut(self,bbox,shape):
+        self.clipboard.assign_copied(copied,bbox)
+    def cut(self,bbox,shape,ispermanet=True):
         og_img =self.img.get_image()
         # create mask
         mask = Image.new("L", size=og_img.size, color=0)
@@ -185,37 +192,39 @@ class Controller:
         copied = Image.new("RGBA", size=og_img.size)
         copied.paste(og_img, (0, 0), mask)
         # put the image into the clipboard
-        self.clipboard.assign_copied(copied)
+        self.clipboard.assign_copied(copied,bbox)
         # remove that part from the image(layer)
         mask = ImageOps.invert(mask)
         new_image = Image.new("RGBA", size=og_img.size)
         new_image.paste(og_img, (0, 0), mask)
         # cache image
-        self.clipboard.transforming_image=new_image
+        self.clipboard.backup_image=new_image
+
+        if ispermanet:
+            self.new_image(new_image)
         return new_image
     def paste(self):
         pass
 
     def apply(self,x,y):
-        pasted = self.clipboard.get_copied()
-        if self.clipboard.transforming_image:
-            self.clipboard.transforming_image.paste(pasted, (int(x), int(y)), pasted)
-            self.new_image(self.clipboard.transforming_image)
-            self.clipboard.transforming_image = None
+        pasted= self.display.transforming_image
+        if self.clipboard.backup_image:
+            self.clipboard.backup_image.paste(pasted, (int(x), int(y)), pasted)
+            self.new_image(self.clipboard.backup_image)
+            self.clipboard.backup_image = None
 
         else:
             self.img.image.paste(pasted, (int(x), int(y)), pasted)
 
+
+
+
     def _test(self,xd):
-        w=51
-        self.draw.ellipse((50, 50, 300, 300),
-                          fill="pink", width=w)
+        self.cut([200,200,400,400],1)
+        img=self.clipboard.get_copied()
+        img=img.rotate(angle=30)
+        self.clipboard.assign_copied(img)
 
-        self.draw.ellipse((50, 50, 300, 300),
-                          outline="black", width=1)
+        self.clipboard.transforming_image.paste(img, (0,0), img)
 
-        # update display
-        self.display.canvas.create_oval(50, 50, 300, 300,
-                                        outline="", fill="pink", width=w)
-        self.display.canvas.create_oval(50, 50, 300, 300,
-                                        outline="black", width=1)
+

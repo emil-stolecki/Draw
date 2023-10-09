@@ -6,7 +6,7 @@ class ImageModel:
         self.path = path
         self.image = image
         self.layers = []
-        self.selected_piece=None
+
 
 
     def set_path(self,path: str):
@@ -18,10 +18,6 @@ class ImageModel:
 
     def get_image(self):
         return self.image
-
-
-    def assign_selected(self, selected):
-        self.selected_piece=selected
 
 
     def add_layer(self,layer:Image):

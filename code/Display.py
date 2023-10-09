@@ -1,6 +1,10 @@
+import math
 from tkinter import *
 from PIL import ImageTk,Image,ImageDraw
 from tkinter import filedialog,colorchooser
+
+from PIL.Image import Resampling
+
 from ImageModel import ImageModel
 
 class Display:
@@ -42,15 +46,23 @@ class Display:
         self.clipboard=clipboard
         #0-asign_copied
         #1-get_copied
+        #2-asign transforming image
 
         self.prev_position=[]
         self.clicked=[]
-        self.preview_item = None
-        self.selected_area=None
-        self.temp_item_start_position = (0,0)
-        self.pasted_piece=None
+        self.preview_item=None#id
+        self.selected_area=None#id
+        self.temp_item_start_position = (0,0)#pasted layer's top left corner
+        self.pasted_piece=None#id
         self.pasted_photo=None
-
+        self.active_transformation_outline=None#id
+        self.active_rotation_outline = None #id
+        self.rotation_outline_coords=None #[]
+        self.rotated_piece_offset=(0,0)
+        self.angle=0
+        self.rotation_center=(0,0)
+        self.rotation_center_dot=None#id
+        self.transforming_image=None#image
         self.root = Tk()
         self.root.title("Draw")
         self.root.geometry("1400x900")
@@ -121,10 +133,10 @@ class Display:
 
         self.size_button_frame_border.pack(side="left")
         #slider
-        self.slider_frame=LabelFrame(self.root)
-        self.size_slider=Scale(self.slider_frame,orient="horizontal",width=15, from_=1,to=100, command=self._get_slider_value)
+        self.slider_frame=Frame(self.root)
+        self.size_slider=Scale(self.slider_frame,orient="horizontal",width=15,length=100, from_=1,to=100, command=self._get_size_slider_value)
         self.size_slider.grid(row=0, column=0)
-        self.confirm_size=Button(self.slider_frame, text="X",command=self._hide_slider)
+        self.confirm_size=Button(self.slider_frame, text="X",command=self._hide_size_slider)
         self.confirm_size.grid(row=0, column=1)
 
         # brush color
@@ -179,6 +191,10 @@ class Display:
         self.selection_menu.add_command(label="Free-form", command=self._select_with_free_form)
         self.selection_menu.add_command(label="No Selection", command=self._no_selection)
 
+
+
+
+
         #transform
         self.transform_button = Button( self.buttons_bar , text="Transform",command=self._transform_button_click,height=2,width=5,bg=self.theme.get("button"))
         self.transform_button.pack(side="left")
@@ -187,6 +203,28 @@ class Display:
         self.transform_menu.add_command(label="Move", command=self._move)
         self.transform_menu.add_command(label="Rotate", command=self._rotate)
         self.transform_menu.add_command(label="Scale", command=self._scale)
+
+        self.rotation_menu=Frame(self.root,bd=3)
+        rot_menu_label=Label(self.rotation_menu,text='<-left ROTATE right->')
+        rot_menu_label.grid(row=0,column=2)
+        self.angle_slider = Scale(self.rotation_menu, orient="horizontal", width=15, length=360,from_=-180, to=180,
+                                  command=self._get_angle_slider_value)
+
+        self.angle_slider.grid(row=1, column=0,columnspan=5)
+        self.confirm_angle = Button(self.rotation_menu, text="X", command=self._hide_angle_slider)
+        self.confirm_angle.grid(row=0, column=5)
+        rotation_apply_button=Button(self.rotation_menu,text="Apply",command=self._apply_rotation)
+        rotation_reset_button=Button(self.rotation_menu,text="Reset",command=self._reset_rotation)
+
+        rotation_apply_button.grid(row=2,column=1)
+        rotation_reset_button.grid(row=2,column=3)
+
+
+
+
+
+
+
 
         #scroll panes for the workspace
         self.h = Scrollbar(self.workspace, orient='horizontal')
@@ -326,28 +364,52 @@ class Display:
                 self.canvas.delete(self.selected_area)
             self.temp_item_start_position = (event.x + x_offset, event.y + y_offset)
             if self.shape==1:#select with rectangle
-                self.selected_area=self.canvas.create_rectangle(event.x+x_offset,event.y+y_offset,event.x+x_offset,event.y+y_offset,width=1,dash=(2,2))
+                self.selected_area=self.canvas.create_rectangle(event.x+x_offset,event.y+y_offset,event.x+x_offset,event.y+y_offset,width=1,dash=(2,2),tags='selection')
             if self.shape==2:#select with elipse
                 pass
-                self.selected_area=self.canvas.create_oval(event.x+x_offset,event.y+y_offset,event.x+x_offset,event.y+y_offset,width=1,dash=(2,2))
+                self.selected_area=self.canvas.create_oval(event.x+x_offset,event.y+y_offset,event.x+x_offset,event.y+y_offset,width=1,dash=(2,2),tags='selection')
         #for transforming
         if self.mode == 3:
             self.prev_position = [event.x + x_offset, event.y + y_offset]
             if self.pasted_piece==None: #if there is no image to transform, make one from selection
 
                 if self.selected_area: #transform selection
-                    self._cut()
+                    self._cut(False)#save the original image in case the tranformation gets cancelled or interrupted
                     self._paste()
 
                 else: # if there is no active selection select whole image/layer
                     self._flatten_image()
                     og_img = self.image_method.get(4)()
-                    self.clipboard.get(0)(og_img)
+                    self.transforming_image = og_img
+                    bbox= self.canvas.bbox(self.background_image)
+                    self.clipboard.get(0)(og_img,bbox)
                     new_image = Image.new("RGBA", size=og_img.size,color=(0,0,0,0))
                     self.clipboard.get(2)(new_image)
-                    self.selected_area = self.canvas.bbox(self.background_image)
+                    self.active_transformation_outline = self.canvas.create_rectangle(bbox, width=1,dash=(2,2),outline="blue", tags='selection')
                     self.temp_item_start_position = (0, 0)
                     self.pasted_piece=self.background_image
+
+
+            if self.transform_mode==1:#rotation
+                if self.rotation_menu.winfo_ismapped()==0:
+                    self.rotation_menu.place(x=event.x,y=event.y)
+                    self.angle_slider.set("0")
+                self.rotation_center=(event.x,event.y)
+                if self.active_rotation_outline==None:
+                    bbox=[]
+                    if self.selected_area:
+                        bbox=self.canvas.coords(self.selected_area)
+                    else:
+                        bbox=self.canvas.bbox(self.background_image)
+
+                    self.active_rotation_outline=self.canvas.create_polygon([(bbox[0],bbox[1]),(bbox[2],bbox[1]),(bbox[2],bbox[3]),(bbox[0],bbox[3])],dash=(2,2),width=1,outline="green",fill="")
+
+
+                self.canvas.delete(self.rotation_center_dot)
+                self.rotation_center_dot=self.canvas.create_oval(event.x-2,event.y-2,event.x+2,event.y+2,outline="green",fill="red",tags='selection')
+
+            if self.transform_mode == 2:#scale
+                pass
 
     def _hold_mouse_action(self,event):
         # offset of the slider
@@ -390,21 +452,35 @@ class Display:
                 if y1 < y0:
                     y1=y0
                     y0 = event.y+y_offset
-            if self.shape == 0:
-                self.selected_area = self.canvas.create_line(x0,y0,x1,y1, width=1,dash=(2,2))
             if self.shape == 1:
-                self.selected_area = self.canvas.create_rectangle(x0,y0,x1,y1, width=1,dash=(2,2))
+                self.selected_area = self.canvas.create_rectangle(x0,y0,x1,y1, width=1,dash=(2,2),tags='selection')
             if self.shape == 2:
-                self.selected_area = self.canvas.create_oval(x0,y0,x1,y1, width=1,dash=(2,2))
+                self.selected_area=ted_area = self.canvas.create_oval(x0,y0,x1,y1, width=1,dash=(2,2),tags='selection')
+            if self.shape==3:
+                pass
         # for transforming
         if self.mode == 3:
             if self.transform_mode==0:#move
                 x0, y0 = self.temp_item_start_position
                 x=event.x-self.prev_position[0]+x0
                 y=event.y-self.prev_position[1]+y0
+                og=[0,0]
+
+                og=self.clipboard.get(3)()
+
                 self.canvas.moveto(self.pasted_piece,x,y)
-            if self.transform_mode==1:#rotare
-                pass
+
+                if self.active_rotation_outline:
+                    r_x, r_y = self.rotated_piece_offset
+                    self.canvas.moveto(self.active_transformation_outline, x + og[0]+r_x, y + og[1]+r_y)
+                    self.canvas.moveto(self.active_rotation_outline, x + og[0]+r_x, y + og[1]+r_y)
+                    self.rotation_outline_coords=self.canvas.coords(self.active_rotation_outline)
+
+                else:
+                    if self.active_transformation_outline:
+                        self.canvas.moveto(self.active_transformation_outline, x + og[0], y + og[1])
+
+
             if self.transform_mode==2:#scale
                 pass
 
@@ -435,6 +511,12 @@ class Display:
         #for transform
         if self.mode ==3:
             self.temp_item_start_position=self.canvas.coords(self.pasted_piece)
+            if self.transform_mode==1:
+                pass
+        if self.selected_area:
+            self.canvas.tag_raise(self.selected_area)
+
+
 
 
     def _right_click(self,event):
@@ -480,7 +562,7 @@ class Display:
         self.select_button.config(bg=self.theme.get("button"))
         self.transform_button.config(bg=self.theme.get("button"))
         self.shape=2
-        
+
     def _create_perspective(self):
         self.draw_button.config(bg=self.theme.get("button"))
         self.shape_button.config(bg=self.theme.get("button_active"))
@@ -494,14 +576,11 @@ class Display:
                                y=self.size_button_frame_border.winfo_y()+self.size_button_frame_border.winfo_height())
         self.size_slider.set(self.brush.get(3)())
 
-
-
-    def _get_slider_value(self,value):
+    def _get_size_slider_value(self,value):
         self.brush.get(0)(int(value))
         self.size_ind.config(text=value)
 
-
-    def _hide_slider(self):
+    def _hide_size_slider(self):
         self.slider_frame.place_forget()
     def _color_button_click(self,event):
         color=colorchooser.askcolor()[1]
@@ -528,10 +607,12 @@ class Display:
     def _flatten_image(self):
         img=self.image_method.get(4)()
         self.photo_image = ImageTk.PhotoImage(img)
-        self.canvas.delete("all")
+        self.canvas.delete('!selection')
         self.background_image=self.canvas.create_image(0, 0, anchor=NW, image=self.photo_image)
-        self.selected_area=None
+        self.canvas.tag_raise('selection')
         self.pasted_piece=None
+        self.pasted_photo=None
+
 
 
 
@@ -540,7 +621,7 @@ class Display:
         self.selection_menu.post(self.select_button.winfo_rootx(),
                              self.select_button.winfo_rooty() + self.select_button.winfo_height())
 
-        self._flatten_image()
+        #self._flatten_image()
 
     def _select_with_rectangle(self):
         self.mode=2
@@ -570,6 +651,7 @@ class Display:
 
     def _no_selection(self):
         self.canvas.delete(self.selected_area)
+        self._cancel_transform()#temporary solution, else errors when transforming while no selection
         self.selected_area=None
 
     def _copy(self):
@@ -577,19 +659,33 @@ class Display:
             bbox = self.canvas.coords(self.selected_area)
             self.methods.get(2)(bbox,self.shape)
 
-            
-    def _cut(self):
+
+    def _cut(self,ispermanent=True):
         bbox = self.canvas.coords(self.selected_area)
-        new_image=self.methods.get(3)(bbox,self.shape)
+        new_image=self.methods.get(3)(bbox,self.shape,ispermanent)
+        #save active selection
+        if self.selected_area:
+            sel=self.canvas.coords(self.selected_area)
         #update canvas
         self.photo_image = ImageTk.PhotoImage(new_image)
-        self.canvas.delete("all")
+        self.canvas.delete('!selection')
         self.background_image = self.canvas.create_image(0, 0, anchor=NW, image=self.photo_image)
+
+
     def _paste(self):
         piece=self.clipboard.get(1)()
         if piece:
+            self.transforming_image = piece
             self.pasted_photo=ImageTk.PhotoImage(piece)
             self.pasted_piece =self.canvas.create_image(0, 0, anchor=NW, image=self.pasted_photo)
+
+            sel=self.clipboard.get(3)()
+            if self.shape==1:
+                self.active_transformation_outline=self.canvas.create_rectangle(sel,width=1,dash=(2,2),outline="blue",tags='selection')
+            if self.shape == 2:
+                self.active_transformation_outline = self.canvas.create_oval(sel,width=1, dash=(2, 2),outline="blue",tags='selection')
+            if self.shape ==3:
+                pass
 
     def _transform_button_click(self):
         self.transform_menu.post(self.transform_button.winfo_rootx(),
@@ -603,6 +699,7 @@ class Display:
         self.select_button.config(bg=self.theme.get("button"))
         self.transform_button.config(bg=self.theme.get("button_active"))
 
+
     def _rotate(self):
         self.mode = 3
         self.transform_mode=1
@@ -611,6 +708,77 @@ class Display:
         self.select_button.config(bg=self.theme.get("button"))
         self.transform_button.config(bg=self.theme.get("button_active"))
 
+
+
+
+
+
+    def _get_angle_slider_value(self,value):
+        self.angle=int(value)
+        bbox=[]
+        if self.rotation_outline_coords:
+            c=self.rotation_outline_coords
+
+        else:
+            bbox = self.canvas.coords(self.active_transformation_outline)
+            c = [bbox[0], bbox[1], bbox[2], bbox[1], bbox[2], bbox[3], bbox[0], bbox[3]]
+        coords=[]
+        for i in range(0,len(c),2):
+            #rotate the preview
+            x=c[i]
+            y=c[i+1]*-1
+            cx,cy=self.rotation_center
+            cy=cy*-1
+
+            d = math.sqrt((x - cx) ** 2 + (y -cy ) ** 2)
+
+            angx=math.degrees(math.asin((x-cx)/d))
+            angy=math.degrees(math.asin((y-cy)/d))
+
+            angx2 = 0
+            angy2 = 0
+            if (x - cx)<0 and (y -cy )>0:
+
+                angx2 = (angx + int(value))
+                angy2 = (-angy - int(value))
+
+            if (x - cx)<0 and (y -cy )<0:#######
+                angx2 = (angx - int(value))
+                angy2 = (angy + int(value))
+
+            if (x - cx) > 0 and (y -cy ) > 0:#######
+                angx2 = (angx + int(value))
+                angy2 =(angy - int(value))
+
+            if (x - cx) > 0 and (y -cy ) < 0:
+                angx2 = (angx - int(value))
+                angy2 = (-angy + int(value))
+
+
+            dy = math.sin(math.radians(angy2)) * d
+            dx = math.sin(math.radians(angx2)) * d
+
+
+            if ((x - cx) > 0 and (y -cy ) < 0) or ((x - cx)<0 and (y -cy )>0):
+                x = (dx + cx)
+                y = (dy - cy)
+            else:
+                x = dx + cx
+                y = -dy - cy
+
+            coords.append((x, y))
+        self.canvas.delete(self.active_rotation_outline)
+        self.active_rotation_outline = self.canvas.create_polygon(coords, dash=(2, 2), width=1, outline="green", fill="")
+
+
+        
+
+
+
+    def _hide_angle_slider(self):
+        self.rotation_menu.place_forget()
+        self.canvas.delete(self.rotation_center_dot)
+        self.canvas.delete(self.active_rotation_outline)
 
     def _scale(self):
         self.mode = 3
@@ -622,13 +790,86 @@ class Display:
 
 
 
+
     def _apply_transform(self):
-        x,y=self.temp_item_start_position
-        self.methods.get(5)(x,y)
-        self._flatten_image()
+        if self.active_transformation_outline:
+            x,y=self.temp_item_start_position
+            self.methods.get(5)(x,y)
+            self.canvas.delete(self.active_transformation_outline)
+            self.active_transformation_outline = None
+            self.temp_item_start_position=(0,0)
+            self._flatten_image()
+            self.rotation_menu.place_forget()
+            self.transforming_image = None
+            self.rotation_outline_coords=None
+            self.canvas.delete(self.active_rotation_outline)
+            self.active_rotation_outline=None
+            self.rotated_piece_offset=(0,0)
+
+
+
 
     def _cancel_transform(self):
         self.clipboard.get(2)(None)
+        self.canvas.delete(self.active_transformation_outline)
+        self.active_transformation_outline = None
+        self.temp_item_start_position = (0,0)
         self._flatten_image()
+        self.rotation_menu.place_forget()
+        self.transforming_image=None
+        self.rotated_piece_offset = (0,0)
 
 
+
+    def _apply_rotation(self):
+        x_offset,y_offset=self.temp_item_start_position
+        print(self.temp_item_start_position)
+        x,y=self.rotation_center
+        img=self.transforming_image
+
+        img = img.rotate(angle=self.angle*-1,center=(x-x_offset,y-y_offset), resample=Resampling.BICUBIC)
+        self.transforming_image=img
+        self.pasted_photo = ImageTk.PhotoImage(img)
+        self.canvas.itemconfigure(self.pasted_piece, image=self.pasted_photo)
+        self.rotation_menu.place_forget()
+        self.canvas.delete(self.rotation_center_dot)
+        self.rotation_outline_coords=self.canvas.coords(self.active_rotation_outline)
+
+        #self.canvas.delete(self.active_rotation_outline)
+
+        x_vals=[]
+        y_vals=[]
+        for i in range(0,len(self.rotation_outline_coords)-1,2):
+            x_vals.append(self.rotation_outline_coords[i])
+            y_vals.append(self.rotation_outline_coords[i+1])
+        x_max=max(x_vals)
+        x_min=min(x_vals)
+        y_max = max(y_vals)
+        y_min = min(y_vals)
+
+        x_offset=self.canvas.coords(self.active_transformation_outline)[0]
+        y_offset=self.canvas.coords(self.active_transformation_outline)[1]
+        x_offset = x_min-x_offset
+        y_offset = y_min-y_offset
+
+        #x_max = x_max- x_offset
+        #x_min = x_min-x_offset
+        #y_max = y_max -y_offset
+        #y_min = y_min -y_offset
+        x1,y1=self.rotated_piece_offset
+        self.rotated_piece_offset = (x1+x_offset,y1+y_offset)
+
+        #self.temp_item_start_position=[x_offset, y_offset]
+        self.canvas.delete(self.active_transformation_outline)
+        self.active_transformation_outline= self.canvas.create_rectangle(x_min,y_min,x_max,y_max,width=1, dash=(2, 2),outline="blue",tags='selection')
+        #self.canvas.move(self.active_transformation_outline, x_offset,y_offset)
+
+
+
+    def _reset_rotation(self):
+        self.transforming_image=self.clipboard.get(1)()
+        self.pasted_photo = ImageTk.PhotoImage(self.transforming_image)
+        self.canvas.itemconfigure(self.pasted_piece, image=self.pasted_photo)
+        #self.rotation_outline_coords=None
+        self.canvas.delete(self.active_rotation_outline)
+        #self.rotated_piece_offset = (0, 0)
