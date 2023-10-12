@@ -60,7 +60,7 @@ class Controller:
         size= self.brush.brush_size
         x1,x2=points[0]-size/2,points[0]+size/2
         y1,y2=points[1]-size/2,points[1]+size/2
-        #edit image
+
         if size>1:
             # edit image
             self.draw.ellipse((x1,y1,x2,y2),fill=self.brush.brush_color)

@@ -50,19 +50,28 @@ class Display:
 
         self.prev_position=[]
         self.clicked=[]
+
         self.preview_item=None#id
         self.selected_area=None#id
+        self.pasted_piece = None  # id
+        self.active_transformation_outline = None  # id
+        self.active_rotation_outline = None  # id
+        self.rotation_center_dot = None  # id
+        self.active_scaling_outline=None#id
+        self.scaling_handles=[]
+        self.active_scaling_handle=None
         self.temp_item_start_position = (0,0)#pasted layer's top left corner
-        self.pasted_piece=None#id
-        self.pasted_photo=None
-        self.active_transformation_outline=None#id
-        self.active_rotation_outline = None #id
         self.rotation_outline_coords=None #[]
         self.rotated_piece_offset=(0,0)
+        self.scaled_piece_offset=(0,0)
         self.angle=0
         self.rotation_center=(0,0)
-        self.rotation_center_dot=None#id
+        self.clicks_since_handle = -1
+        self.previous_scaling_outline_coords=None
+        self.pasted_photo = None
         self.transforming_image=None#image
+
+
         self.root = Tk()
         self.root.title("Draw")
         self.root.geometry("1400x900")
@@ -294,6 +303,21 @@ class Display:
         self.canvas.bind("<B1-Motion>", self._hold_mouse_action)
         self.canvas.bind("<ButtonRelease-1>", self._release)
         self.canvas.bind("<Button-3>", self._right_click)
+        #reset
+        self.temp_item_start_position = (0, 0)
+        self.rotation_outline_coords = None
+        self.rotated_piece_offset = (0, 0)
+        self.rotation_center = (0, 0)
+        self.scaled_piece_offset = (0, 0)
+        self.preview_item = None  # id
+        self.selected_area = None  # id
+        self.pasted_piece = None  # id
+        self.active_transformation_outline = None  # id
+        self.active_rotation_outline = None  # id
+        self.rotation_center_dot = None
+        self.active_scaling_outline = None  # id
+        self.scaling_handles = []
+
 
 
    #OPEN/SAVE
@@ -321,6 +345,20 @@ class Display:
             self.canvas.bind("<B1-Motion>", self._hold_mouse_action)
             self.canvas.bind("<ButtonRelease-1>", self._release)
             self.canvas.bind("<Button-3>", self._right_click)
+            # reset
+            self.temp_item_start_position = (0, 0)
+            self.rotation_outline_coords = None
+            self.rotated_piece_offset = (0, 0)
+            self.rotation_center = (0, 0)
+            self.scaled_piece_offset = (0, 0)
+            self.preview_item = None  # id
+            self.selected_area = None  # id
+            self.pasted_piece = None  # id
+            self.active_transformation_outline = None  # id
+            self.active_rotation_outline = None  # id
+            self.rotation_center_dot = None
+            self.active_scaling_outline = None  # id
+            self.scaling_handles = []
 
     def _save_chosen(self):
         if self.image_method.get(2)():#check if path exists
@@ -379,12 +417,13 @@ class Display:
 
                 else: # if there is no active selection select whole image/layer
                     self._flatten_image()
-                    og_img = self.image_method.get(4)()
+                    og_img = self.image_method.get(4)()##get whole image
                     self.transforming_image = og_img
                     bbox= self.canvas.bbox(self.background_image)
-                    self.clipboard.get(0)(og_img,bbox)
-                    new_image = Image.new("RGBA", size=og_img.size,color=(0,0,0,0))
-                    self.clipboard.get(2)(new_image)
+                    self.clipboard.get(0)(og_img,bbox)#save the image and bbox to clipboard
+                    new_image = Image.new("RGBA", size=og_img.size,color=(0,0,0,0))#new background
+                    self.clipboard.get(2)(new_image)#save as backup
+                    self.selected_area = self.canvas.create_rectangle(bbox, width=1,dash=(2,2),outline="red", tags='selection')
                     self.active_transformation_outline = self.canvas.create_rectangle(bbox, width=1,dash=(2,2),outline="blue", tags='selection')
                     self.temp_item_start_position = (0, 0)
                     self.pasted_piece=self.background_image
@@ -395,6 +434,7 @@ class Display:
                     self.rotation_menu.place(x=event.x,y=event.y)
                     self.angle_slider.set("0")
                 self.rotation_center=(event.x,event.y)
+
                 if self.active_rotation_outline==None:
                     bbox=[]
                     if self.selected_area:
@@ -409,9 +449,52 @@ class Display:
                 self.rotation_center_dot=self.canvas.create_oval(event.x-2,event.y-2,event.x+2,event.y+2,outline="green",fill="red",tags='selection')
 
             if self.transform_mode == 2:#scale
-                pass
+                self.scaled_image=self.transforming_image
+                if self.active_scaling_outline== None:
+                    coords=self.canvas.coords(self.active_transformation_outline)
+                    self.previous_scaling_outline_coords=coords
+                    self.active_scaling_outline=self.canvas.create_rectangle(coords,outline="orange", width=1, dash=(2,2),tags=('selection','scale'))
+                    s=4
+                    a=self.canvas.create_rectangle(coords[0]-s,coords[1]-s,
+                                               coords[0]+s,coords[1]+s,
+                                               outline="orange", fill="yellow", width=1 ,tags=('selection','scale'))
+                    b = self.canvas.create_rectangle(coords[2] - s, coords[1] - s,
+                                                 coords[2] + s, coords[1] + s,
+                                                 outline="orange", fill="yellow", width=1, tags=('selection','scale'))
+                    c = self.canvas.create_rectangle(coords[2] - s, coords[3] - s,
+                                                 coords[2] + s, coords[3] + s,
+                                                 outline="orange", fill="yellow", width=1, tags=('selection','scale'))
+                    d = self.canvas.create_rectangle(coords[0] - s, coords[3] -s,
+                                                 coords[0] + s, coords[3] + s,
+                                                 outline="orange", fill="yellow", width=1, tags=('selection','scale'))
+
+                    self.scaling_handles={
+                        "a":a,
+                        "b":b,
+                        "c":c,
+                        "d":d
+                    }
+
+                    self.canvas.tag_bind(a, '<ButtonPress-1>',self._handle_scaling_a)
+                    self.canvas.tag_bind(b, '<ButtonPress-1>', self._handle_scaling_b)
+                    self.canvas.tag_bind(c, '<ButtonPress-1>', self._handle_scaling_c)
+                    self.canvas.tag_bind(d, '<ButtonPress-1>', self._handle_scaling_d)
+
+                    self.canvas.tag_bind(a, '<ButtonRelease-1>', self._release_handle)
+                    self.canvas.tag_bind(b, '<ButtonRelease-1>', self._release_handle)
+                    self.canvas.tag_bind(c, '<ButtonRelease-1>', self._release_handle)
+                    self.canvas.tag_bind(d, '<ButtonRelease-1>', self._release_handle)
+
+
+                else:
+                    self.canvas.tag_raise('scale')
+                    self.previous_scaling_outline_coords = self.canvas.coords(self.active_scaling_outline)
+        if self.clicks_since_handle==0 or self.clicks_since_handle==1:
+            self.clicks_since_handle=self.clicks_since_handle+1
+
 
     def _hold_mouse_action(self,event):
+
         # offset of the slider
         x_offset = self.h.get()[0] * self.image_w
         y_offset = self.v.get()[0] * self.image_h
@@ -465,28 +548,59 @@ class Display:
                 x=event.x-self.prev_position[0]+x0
                 y=event.y-self.prev_position[1]+y0
                 og=[0,0]
-
+                s_x, s_y = self.scaled_piece_offset
                 og=self.clipboard.get(3)()
 
                 self.canvas.moveto(self.pasted_piece,x,y)
 
                 if self.active_rotation_outline:
                     r_x, r_y = self.rotated_piece_offset
-                    self.canvas.moveto(self.active_transformation_outline, x + og[0]+r_x, y + og[1]+r_y)
-                    self.canvas.moveto(self.active_rotation_outline, x + og[0]+r_x, y + og[1]+r_y)
+
+
+                    self.canvas.moveto(self.active_transformation_outline, x + og[0]+r_x+s_x, y + og[1]+r_y+s_y)
+                    self.canvas.moveto(self.active_rotation_outline, x + og[0]+r_x+s_x, y + og[1]+r_y+s_y)
                     self.rotation_outline_coords=self.canvas.coords(self.active_rotation_outline)
 
                 else:
                     if self.active_transformation_outline:
-                        self.canvas.moveto(self.active_transformation_outline, x + og[0], y + og[1])
+                        self.canvas.moveto(self.active_transformation_outline, x + og[0]+s_x, y + og[1]+s_y)
 
 
             if self.transform_mode==2:#scale
-                pass
+                if self.clicks_since_handle==1 :
 
+                    handles=list(self.scaling_handles.values())
+                    #0 upper left
+                    #1 upper right
+                    #2-lower right
+                    #3 lower left
+
+                    h=handles.index(self.active_scaling_handle)
+
+                    self.canvas.moveto(self.active_scaling_handle,event.x+4,event.y+4)
+
+                    if h==0:#1.y,3.x
+                        self.canvas.moveto(self.scaling_handles.get("b"), y=event.y+4)
+                        self.canvas.moveto(self.scaling_handles.get("d"), x=event.x+4)
+                    if h==1:#0.y,2.x
+                        self.canvas.moveto(self.scaling_handles.get("a"), y=event.y + 4)
+                        self.canvas.moveto(self.scaling_handles.get("c"), x=event.x + 4)
+                    if h==2:#1.x,3.y
+                        self.canvas.moveto(self.scaling_handles.get("b"), x=event.x + 4)
+                        self.canvas.moveto(self.scaling_handles.get("d"), y=event.y + 4)
+                    if h==3:#2.y,0.x
+                        self.canvas.moveto(self.scaling_handles.get("c"), y=event.y + 4)
+                        self.canvas.moveto(self.scaling_handles.get("a"), x=event.x + 4)
+                    a=self.canvas.coords(self.scaling_handles.get("a"))
+                    c= self.canvas.coords(self.scaling_handles.get("c"))
+                    self.canvas.delete(self.active_scaling_outline)
+                    self.active_scaling_outline = self.active_scaling_outline = self.canvas.create_rectangle(a[0]+4,a[1]+4,c[0]+4,c[1]+4,
+                                                                                                             outline="orange",width=1,
+                                                                                                             dash=(2, 2),tags=('selection','scale'))
 
     def _release(self,event):
         # for creating shapes
+
         if self.mode ==1 and self.image_w>self.clicked[0] and self.image_h>self.clicked[1]:
             x_offset = self.h.get()[0] * self.image_w
             y_offset = self.v.get()[0] * self.image_h
@@ -511,8 +625,8 @@ class Display:
         #for transform
         if self.mode ==3:
             self.temp_item_start_position=self.canvas.coords(self.pasted_piece)
-            if self.transform_mode==1:
-                pass
+
+
         if self.selected_area:
             self.canvas.tag_raise(self.selected_area)
 
@@ -612,6 +726,7 @@ class Display:
         self.canvas.tag_raise('selection')
         self.pasted_piece=None
         self.pasted_photo=None
+        #self.rotated_piece_offset = (0, 0)
 
 
 
@@ -698,6 +813,9 @@ class Display:
         self.shape_button.config(bg=self.theme.get("button"))
         self.select_button.config(bg=self.theme.get("button"))
         self.transform_button.config(bg=self.theme.get("button_active"))
+        self.canvas.delete('scale')
+        self.active_scaling_outline = None
+        self.scaling_handles = None
 
 
     def _rotate(self):
@@ -707,6 +825,9 @@ class Display:
         self.shape_button.config(bg=self.theme.get("button"))
         self.select_button.config(bg=self.theme.get("button"))
         self.transform_button.config(bg=self.theme.get("button_active"))
+        self.canvas.delete('scale')
+        self.active_scaling_outline = None
+        self.scaling_handles = None
 
 
 
@@ -796,7 +917,10 @@ class Display:
             x,y=self.temp_item_start_position
             self.methods.get(5)(x,y)
             self.canvas.delete(self.active_transformation_outline)
+            self.canvas.delete('scale')
             self.active_transformation_outline = None
+            self.active_scaling_outline=None
+            self.scaling_handles=()
             self.temp_item_start_position=(0,0)
             self._flatten_image()
             self.rotation_menu.place_forget()
@@ -805,6 +929,10 @@ class Display:
             self.canvas.delete(self.active_rotation_outline)
             self.active_rotation_outline=None
             self.rotated_piece_offset=(0,0)
+            self.scaled_piece_offset =(0,0)
+
+
+
 
 
 
@@ -812,18 +940,25 @@ class Display:
     def _cancel_transform(self):
         self.clipboard.get(2)(None)
         self.canvas.delete(self.active_transformation_outline)
+        self.canvas.delete('scale')
         self.active_transformation_outline = None
+        self.active_scaling_outline = None
+        self.scaling_handles = ()
         self.temp_item_start_position = (0,0)
         self._flatten_image()
         self.rotation_menu.place_forget()
         self.transforming_image=None
         self.rotated_piece_offset = (0,0)
+        self.canvas.delete(self.active_rotation_outline)
+        self.active_rotation_outline = None
+        self.rotation_outline_coords = None
+        self.scaled_piece_offset =(0,0)
 
 
 
     def _apply_rotation(self):
         x_offset,y_offset=self.temp_item_start_position
-        print(self.temp_item_start_position)
+
         x,y=self.rotation_center
         img=self.transforming_image
 
@@ -852,10 +987,7 @@ class Display:
         x_offset = x_min-x_offset
         y_offset = y_min-y_offset
 
-        #x_max = x_max- x_offset
-        #x_min = x_min-x_offset
-        #y_max = y_max -y_offset
-        #y_min = y_min -y_offset
+
         x1,y1=self.rotated_piece_offset
         self.rotated_piece_offset = (x1+x_offset,y1+y_offset)
 
@@ -873,3 +1005,55 @@ class Display:
         #self.rotation_outline_coords=None
         self.canvas.delete(self.active_rotation_outline)
         #self.rotated_piece_offset = (0, 0)
+
+    def _handle_scaling_a(self,event):
+        self.active_scaling_handle=self.scaling_handles.get("a")
+        self.clicks_since_handle=0
+
+    def _handle_scaling_b(self, event):
+        self.active_scaling_handle=self.scaling_handles.get("b")
+        self.clicks_since_handle = 0
+    def _handle_scaling_c(self, event):
+        self.active_scaling_handle=self.scaling_handles.get("c")
+        self.clicks_since_handle = 0
+
+    def _handle_scaling_d(self, event):
+        self.active_scaling_handle=self.scaling_handles.get("d")
+        self.clicks_since_handle = 0
+
+    def _release_handle(self,event):
+        img=self.transforming_image
+
+
+        pre_scaled_coords=self.previous_scaling_outline_coords
+
+        offset=self.canvas.coords(self.pasted_piece)
+
+
+        coords=(
+            pre_scaled_coords[0]-offset[0],
+            pre_scaled_coords[1]-offset[1],
+            pre_scaled_coords[2]-offset[0],
+            pre_scaled_coords[3]-offset[1]
+        )
+
+        img=img.crop(coords)
+        scaled_coords=self.canvas.coords(self.active_scaling_outline)
+        width=int(scaled_coords[2]-scaled_coords[0])
+        heigth=int(scaled_coords[3]-scaled_coords[1])
+        img=img.resize((width,heigth),Image.Resampling.BICUBIC)
+
+        new_image=Image.new("RGBA", size=self.transforming_image.size)
+        new_image.paste(img,(int(scaled_coords[0]-offset[0]),int(scaled_coords[1]-offset[1])),img)
+
+        self.pasted_photo=ImageTk.PhotoImage(new_image)
+        self.canvas.itemconfigure(self.pasted_piece, image=self.pasted_photo)
+        self.transforming_image=new_image
+
+        self.canvas.delete(self.active_transformation_outline)
+        self.active_transformation_outline=self.active_transformation_outline = self.canvas.create_rectangle(scaled_coords, width=1,dash=(2,2),outline="blue", tags='selection')
+        #handle 0 (upper left) is the reference for drawing the outline
+        #if it's moved, it's necesary to calculate this offset
+        sc=self.scaled_piece_offset
+        self.scaled_piece_offset=(sc[0]+(scaled_coords[0]-pre_scaled_coords[0]),sc[1]+(scaled_coords[1]-pre_scaled_coords[1]))
+

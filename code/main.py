@@ -6,9 +6,6 @@ from Controller import Controller
 def main():
 
     c=Controller()
-
-
-
     c.display.loop()
 
 if __name__ == "__main__":
