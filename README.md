@@ -9,10 +9,15 @@
   <li>create shapes such as circle and rectangle</li>
   <li>change size and color of the brush</li>
   <li>select an area and cut or copy and paste it</li>
-  <li>create and draw on multiple layers</li>
+  <li>move, scale and resize pasted image</li>
   <li>save image</li>
 </ul>
 <br/>
+<p>Future plans</p>
+<ul>
+  <li>draw on multiple layers</li>
+  <li>select with custom/free-form shape</li>
+</ul>
 <p>Technologies</p>
 <ul>
   <li>Python</li>
