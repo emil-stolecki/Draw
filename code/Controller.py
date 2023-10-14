@@ -1,3 +1,4 @@
+from Click import Click
 from ImageModel import ImageModel
 from Display import Display
 from Brush import Brush
@@ -35,6 +36,7 @@ class Controller:
             3:self.new_image,
             4:self.img.get_image
             }
+
         self.brush=Brush(6,(0,0,0))
 
         self.brush_methods= {
@@ -52,7 +54,16 @@ class Controller:
             3:self.clipboard.get_copied_coords
 
         }
-        self.display=Display(self.methods,self.image_methods,self.brush_methods,self.clipboard_methods)
+        self.click = Click(self.methods)
+
+        #self.click_methods={
+           # "click":self.click.click,
+            #"drag":self.click.drag,
+            #"release":self.click.release,
+           # "clicked":self.click.clicked
+       # }
+
+        self.display=Display(self.click,self.image_methods,self.brush_methods,self.clipboard_methods)
 
         self.draw = ImageDraw.Draw(self.img.image)
 

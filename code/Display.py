@@ -5,10 +5,15 @@ from tkinter import filedialog,colorchooser
 
 from PIL.Image import Resampling
 
+from Click import Click
 from ImageModel import ImageModel
+from TransformModule import TransformModule
+
 
 class Display:
-    def __init__(self,methods,image_method,brush_methods,clipboard):
+    mode: int
+
+    def __init__(self,click,image_method,brush_methods,clipboard):
         self.mode=0
         # 0-draw
         # 1-create shape
@@ -26,11 +31,14 @@ class Display:
         # 0-move
         # 1-rotate
         # 2-scale
-        self.methods = methods
-        #0-draw
-        #1-create_shape
-        #2-select
-        #3-transform
+        self.click = click
+        # .click - {0,1,2,3}
+        # .drag - {0,1,2,3}
+        # .release - {0,1,2,3}
+            #0-draw
+            #1-create_shape
+            #2-select
+            #3-transform
         self.image_method = image_method
         #0-save_image
         #1-img.set_path
@@ -48,28 +56,20 @@ class Display:
         #1-get_copied
         #2-asign transforming image
 
-        self.prev_position=[]
-        self.clicked=[]
+
+
 
         self.preview_item=None#id
         self.selected_area=None#id
         self.pasted_piece = None  # id
-        self.active_transformation_outline = None  # id
-        self.active_rotation_outline = None  # id
-        self.rotation_center_dot = None  # id
-        self.active_scaling_outline=None#id
-        self.scaling_handles=[]
-        self.active_scaling_handle=None
-        self.temp_item_start_position = (0,0)#pasted layer's top left corner
-        self.rotation_outline_coords=None #[]
-        self.rotated_piece_offset=(0,0)
-        self.scaled_piece_offset=(0,0)
-        self.angle=0
-        self.rotation_center=(0,0)
-        self.clicks_since_handle = -1
-        self.previous_scaling_outline_coords=None
         self.pasted_photo = None
-        self.transforming_image=None#image
+        self.temp_item_start_position=(0,0)
+        self.clicks_since_handle = -1  # 0 when a handle is clicked
+        # if it's 0, it will increase after one click outside the handle
+        # if it's 1, the image is resized
+        # if it's 2, scaling is didabled and the counter is not increased
+
+        self.tm= TransformModule()
 
 
         self.root = Tk()
@@ -292,6 +292,7 @@ class Display:
         self.image_method.get(3)(image)#attach new image
         #create  new display
         self.canvas.destroy()
+        self.click.image_size = image.size
         self.canvas = Canvas(self.workspace, width=1000,height=800,xscrollcommand=self.h.set, yscrollcommand=self.v.set)
         self.photo_image = ImageTk.PhotoImage(image)
         self.background_image=self.canvas.create_image(0, 0, anchor=NW, image=self.photo_image)
@@ -333,7 +334,7 @@ class Display:
             self.image_method.get(1)(filepath) #set path
             #create new display
             self.canvas.destroy()
-            self.image_w , self.image_h=image.size
+            self.click.image_size=image.size
             self.canvas = new_canvas = Canvas(self.workspace, width=1000, height=800, xscrollcommand=self.h.set, yscrollcommand=self.v.set)
             self.photo_image = ImageTk.PhotoImage(image)
             self.background_image=self.canvas.create_image(0, 0, anchor=NW, image=self.photo_image)
@@ -382,20 +383,12 @@ class Display:
     def _left_click_action(self,event):
         x_offset=self.h.get()[0]*self.image_w
         y_offset=self.v.get()[0]*self.image_h
-        self.clicked = [event.x + x_offset, event.y + y_offset]
-        # for drawing
-        if self.mode ==0 and self.image_w>event.x+x_offset and self.image_h>event.y+y_offset:
-            self.prev_position = [event.x + x_offset, event.y + y_offset]
-            self.methods.get(self.mode)([event.x+x_offset,event.y+y_offset,self.prev_position[0],self.prev_position[1]])#draw dot
+        self.click.clicked = [event.x + x_offset, event.y + y_offset]
+
+        self.click.click.get(self.mode)((event.x,event.y,x_offset,y_offset,self.shape))
         #for creating shapes
-        if self.mode ==1:#create an item on canvas that will be used as preview
-            self.temp_item_start_position=(event.x+x_offset,event.y+y_offset)
-            if self.shape==0:
-                self.preview_item=self.canvas.create_line(event.x+x_offset,event.y+y_offset,event.x+x_offset,event.y+y_offset,width=1)
-            if self.shape==1:
-                self.preview_item=self.canvas.create_rectangle(event.x+x_offset,event.y+y_offset,event.x+x_offset,event.y+y_offset,width=1)
-            if self.shape==2:
-                self.preview_item=self.canvas.create_oval(event.x+x_offset,event.y+y_offset,event.x+x_offset,event.y+y_offset,width=1)
+
+
         #for selecting
         if self.mode ==2:#create an item on canvas that will be used as preview
             if self.selected_area:  # delete old if exists
@@ -498,13 +491,7 @@ class Display:
         # offset of the slider
         x_offset = self.h.get()[0] * self.image_w
         y_offset = self.v.get()[0] * self.image_h
-        if self.mode ==0:#drawing
-            self.prev_position = self.clicked
-            self.clicked = [event.x+x_offset, event.y+y_offset]
-
-            # in case the image is larger than the canvas, draw only on the image, not outside of it
-            if self.image_w>event.x+x_offset and self.image_h+y_offset>event.y:
-                self.methods.get(self.mode)([event.x+x_offset,event.y+y_offset,self.prev_position[0],self.prev_position[1]])#draw
+        self.click.drag.get(self.mode)((event.x,event.y,x_offset,y_offset,self.image_w,self.image_h))
 
         if self.mode ==1:#creating shapes (preview)
             self.canvas.delete(self.preview_item)#delete old create new
@@ -963,6 +950,7 @@ class Display:
         img=self.transforming_image
 
         img = img.rotate(angle=self.angle*-1,center=(x-x_offset,y-y_offset), resample=Resampling.BICUBIC)
+        img.show()
         self.transforming_image=img
         self.pasted_photo = ImageTk.PhotoImage(img)
         self.canvas.itemconfigure(self.pasted_piece, image=self.pasted_photo)
@@ -1042,7 +1030,7 @@ class Display:
         width=int(scaled_coords[2]-scaled_coords[0])
         heigth=int(scaled_coords[3]-scaled_coords[1])
         img=img.resize((width,heigth),Image.Resampling.BICUBIC)
-
+        img.show()
         new_image=Image.new("RGBA", size=self.transforming_image.size)
         new_image.paste(img,(int(scaled_coords[0]-offset[0]),int(scaled_coords[1]-offset[1])),img)
 
