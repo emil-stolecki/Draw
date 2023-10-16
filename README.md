@@ -17,6 +17,7 @@
 <ul>
   <li>draw on multiple layers</li>
   <li>select with custom/free-form shape</li>
+  <li>add eraser</li>
 </ul>
 <p>Technologies</p>
 <ul>
