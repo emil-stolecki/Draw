@@ -1,6 +1,7 @@
 <h1>Draw</h1>
 <br/>
-<p>Draw is an image editorfor a programming portfolio.</p>
+<p>Draw is an image editor for a programming portfolio.</p>
+<p>The graphic interface is handled by Tkinter, while the image is transformed using Pillow.</p>
 <br/>
 <p>Features</p>
 <ul>
@@ -13,13 +14,18 @@
   <li>save image</li>
 </ul>
 <br/>
+
+<p>Technologies and packages used</p>
+<ul>
+  <li>Python</li>
+  <li>Pillow</li>
+  <li>Tkinter</li>
+</ul>
+
 <p>Future plans</p>
 <ul>
   <li>draw on multiple layers</li>
   <li>select with custom/free-form shape</li>
   <li>add eraser</li>
 </ul>
-<p>Technologies</p>
-<ul>
-  <li>Python</li>
-</ul>
+
